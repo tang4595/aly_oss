@@ -24,6 +24,16 @@ class AlyOss {
 
   Stream<UploadResponse> get onUpload => _onUploadController.stream;
 
+  //todo: Android暂未实现下载模块.
+  /// Download.
+  StreamController<ProgressResponse> _onDownloadProgressController = StreamController<ProgressResponse>.broadcast();
+
+  Stream<ProgressResponse> get onDownloadProgress => _onDownloadProgressController.stream;
+
+  StreamController<DownloadResponse> _onDownloadController = StreamController<DownloadResponse>.broadcast();
+
+  Stream<DownloadResponse> get onDownload => _onDownloadController.stream;
+
   static Future<dynamic> _handler(MethodCall methodCall) async {
     String instanceId = methodCall.arguments['instanceId'];
     AlyOss instance = _instances[instanceId];
@@ -34,6 +44,12 @@ class AlyOss {
         break;
       case 'onUpload':
         instance._onUploadController.add(UploadResponse.fromMap(methodCall.arguments));
+        break;
+      case 'onDownloadProgress':
+        instance._onDownloadProgressController.add(ProgressResponse.fromMap(methodCall.arguments));
+        break;
+      case 'onDownload':
+        instance._onDownloadController.add(DownloadResponse.fromMap(methodCall.arguments));
         break;
       default:
         print('Call ${methodCall.method} from platform, arguments=${methodCall.arguments}');
@@ -51,10 +67,16 @@ class AlyOss {
   void shutdown() {
     _onProgressController.close();
     _onUploadController.close();
+    _onDownloadProgressController.close();
+    _onDownloadController.close();
   }
 
   Future<Map<String, dynamic>> upload(UploadRequest request) async {
     return await _invokeMethod('upload', request.toMap());
+  }
+
+  Future<Map<String, dynamic>> download(DownloadRequest request) async {
+    return await _invokeMethod('download', request.toMap());
   }
 
   Future<Map<String, dynamic>> exist(KeyRequest request) async {
@@ -130,6 +152,16 @@ class UploadRequest extends KeyRequest {
   }
 }
 
+class DownloadRequest extends KeyRequest {
+
+  DownloadRequest(requestId, bucket, key) : super(requestId, bucket, key);
+
+  Map<String, dynamic> toMap() {
+    var m = Map.of(super.toMap());
+    return m;
+  }
+}
+
 abstract class Response {
   final bool success;
   final String requestId;
@@ -154,6 +186,27 @@ class UploadResponse extends KeyResponse {
           bucket: map['bucket'],
           key: map['key'],
         );
+
+  String toString() {
+    return '{success:$success, requestId:$requestId, bucket:$bucket, key:$key}';
+  }
+}
+
+class DownloadResponse extends KeyResponse {
+ final String data;
+
+  DownloadResponse({success, requestId, bucket, key, this.data}) : super(success: success, requestId: requestId, bucket: bucket, key: key);
+
+  static DownloadResponse fromMap(Map map) {
+    DownloadResponse response = DownloadResponse(
+      success: "true" == map['success'],
+      requestId: map['requestId'],
+      bucket: map['bucket'],
+      key: map['key'],
+      data: map['data'],
+    );
+    return response;
+  }
 
   String toString() {
     return '{success:$success, requestId:$requestId, bucket:$bucket, key:$key}';

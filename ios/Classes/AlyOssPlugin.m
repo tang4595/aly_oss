@@ -24,6 +24,10 @@ OSSClient *oss = nil;
         [self upload:call result:result];
         
         return;
+    } else if ([@"download" isEqualToString:call.method]) {
+        [self download:call result:result];
+        
+        return;
     } else if ([@"exist" isEqualToString:call.method]) {
         [self exist:call result:result];
         
@@ -144,6 +148,59 @@ OSSClient *oss = nil;
                 @"message":task.error
             };
             [CHANNEL invokeMethod:@"onUpload" arguments:arguments];
+        }
+        return nil;
+    }];
+}
+
+- (void)download:(FlutterMethodCall *)call result:(FlutterResult)result {
+    if (![self checkOss:result]) {
+        return;
+    }
+    
+    NSString *instanceId = call.arguments[@"instanceId"];
+    NSString *requestId = call.arguments[@"requestId"];
+    NSString *bucket = call.arguments[@"bucket"];
+    NSString *key = call.arguments[@"key"];
+
+    OSSGetObjectRequest *request = [OSSGetObjectRequest new];
+    request.bucketName = bucket;
+    request.objectKey = key;
+    request.downloadProgress = ^(int64_t bytesWritten, int64_t totalBytesWritten, int64_t totalBytesExpectedToWrite) {
+        NSDictionary *arguments = @{
+            @"instanceId":instanceId,
+            @"requestId":requestId,
+            @"bucket":bucket,
+            @"key":key,
+            @"currentSize":  [NSString stringWithFormat:@"%lld",totalBytesWritten],
+            @"totalSize": [NSString stringWithFormat:@"%lld",totalBytesExpectedToWrite]
+        };
+        [CHANNEL invokeMethod:@"onDownloadProgress" arguments:arguments];
+    };
+
+    OSSTask *getTask = [oss getObject:request];
+    [getTask continueWithBlock:^id(OSSTask *task) {
+        if (!task.error) {
+            OSSGetObjectResult *getResult = task.result;
+            NSDictionary *arguments = @{
+                @"success": @"true",
+                @"instanceId":instanceId,
+                @"requestId":requestId,
+                @"bucket":bucket,
+                @"key":key,
+                @"data":[getResult.downloadedData base64EncodedStringWithOptions: NSDataBase64Encoding64CharacterLineLength]
+            };
+            [CHANNEL invokeMethod:@"onDownload" arguments:arguments];
+        } else {
+            NSDictionary *arguments = @{
+                @"success": @"false",
+                @"instanceId":instanceId,
+                @"requestId":requestId,
+                @"bucket":bucket,
+                @"key":key,
+                @"message":task.error
+            };
+            [CHANNEL invokeMethod:@"onDownload" arguments:arguments];
         }
         return nil;
     }];
