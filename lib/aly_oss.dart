@@ -106,19 +106,15 @@ abstract class Request {
 }
 
 class InitRequest extends Request {
-  final String stsServer;
   final String endpoint;
-  final String aesKey;
-  final String iv;
+  final String tokenJson;
 
-  InitRequest(requestId, this.stsServer, this.endpoint, this.aesKey, this.iv) : super(requestId);
+  InitRequest(requestId, this.endpoint, this.tokenJson) : super(requestId);
 
   Map<String, dynamic> toMap() {
     var m = Map.of(super.toMap());
-    m['stsServer'] = stsServer;
     m['endpoint'] = endpoint;
-    m['aesKey'] = aesKey;
-    m['iv'] = iv;
+    m['tokenJson'] = tokenJson;
 
     return m;
   }
