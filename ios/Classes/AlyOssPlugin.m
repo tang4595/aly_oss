@@ -36,6 +36,10 @@ OSSClient *oss = nil;
         [self delete:call result:result];
         
         return;
+    } else if ([@"resign" isEqualToString:call.method]) {
+        [self resignUrl:call result:result];
+        
+        return;
     } else {
         result(FlutterMethodNotImplemented);
     }
@@ -257,6 +261,46 @@ OSSClient *oss = nil;
         
         result(arguments);
     }
+}
+
+- (void)resignUrl:(FlutterMethodCall*)call result:(FlutterResult)result {
+    if (![self checkOss:result]) {
+        return;
+    }
+    
+    NSString *instanceId = call.arguments[@"instanceId"];
+    NSString *requestId = call.arguments[@"requestId"];
+    NSString *bucket = call.arguments[@"bucket"];
+    NSString *key = call.arguments[@"key"];
+    NSString *expireSeconds = call.arguments[@"expireSeconds"];
+    long long expireNum = [expireSeconds longLongValue];
+    
+    OSSTask *task = [oss presignConstrainURLWithBucketName:bucket withObjectKey:key withExpirationInterval:expireNum];
+    [task continueWithBlock:^id _Nullable(OSSTask * _Nonnull task) {
+        if (!task.error) {
+            OSSGetObjectResult *getResult = task.result;
+            NSDictionary *arguments = @{
+                @"success": @"true",
+                @"instanceId":instanceId,
+                @"requestId":requestId,
+                @"bucket":bucket,
+                @"key":key,
+                @"data":[NSString stringWithFormat:@"%@", getResult]
+            };
+            result(arguments);
+        } else {
+            NSDictionary *arguments = @{
+                @"success": @"false",
+                @"instanceId":instanceId,
+                @"requestId":requestId,
+                @"bucket":bucket,
+                @"key":key,
+                @"message":task.error
+            };
+            result(arguments);
+        }
+        return nil;
+    }];
 }
 
 - (BOOL)checkOss:(FlutterResult)result {

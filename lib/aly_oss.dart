@@ -87,6 +87,10 @@ class AlyOss {
     return await _invokeMethod('delete', request.toMap());
   }
 
+  Future<Map<String, dynamic>> resignUrl(ResignUrlRequest request) async {
+    return await _invokeMethod('resign', request.toMap());
+  }
+
   Future<Map<String, dynamic>> _invokeMethod(String method, [Map<String, dynamic> arguments = const {}]) {
     Map<String, dynamic> withId = Map.of(arguments);
     withId['instanceId'] = _instanceId;
@@ -154,6 +158,19 @@ class DownloadRequest extends KeyRequest {
 
   Map<String, dynamic> toMap() {
     var m = Map.of(super.toMap());
+    return m;
+  }
+}
+
+class ResignUrlRequest extends KeyRequest {
+  final String expireSeconds;
+
+  ResignUrlRequest(requestId, bucket, key, this.expireSeconds) : super(requestId, bucket, key);
+
+  Map<String, dynamic> toMap() {
+    var m = Map.of(super.toMap());
+    m['expireSeconds'] = expireSeconds;
+
     return m;
   }
 }
