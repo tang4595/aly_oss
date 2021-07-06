@@ -36,6 +36,10 @@ OSSClient *oss = nil;
         [self delete:call result:result];
         
         return;
+    } else if ([@"resign" isEqualToString:call.method]) {
+        [self resignUrl:call result:result];
+        
+        return;
     } else {
         result(FlutterMethodNotImplemented);
     }
@@ -44,51 +48,35 @@ OSSClient *oss = nil;
 - (void)init:(FlutterMethodCall*)call result:(FlutterResult)result {
     NSString *instanceId = call.arguments[@"instanceId"];
     NSString *requestId = call.arguments[@"requestId"];
-    NSString *stsServer = call.arguments[@"stsServer"];
     NSString *endpoint = call.arguments[@"endpoint"];
-    NSString *aesKey = call.arguments[@"aesKey"];
-    NSString *iv = call.arguments[@"iv"];
+    NSString *tokenJson = call.arguments[@"tokenJson"];
     
     id<OSSCredentialProvider> credentialProvider = [[OSSFederationCredentialProvider alloc] initWithFederationTokenGetter:^OSSFederationToken * {
-        NSURL *url = [NSURL URLWithString:stsServer];
-        NSURLRequest *request = [NSURLRequest requestWithURL:url];
-        OSSTaskCompletionSource * tcs = [OSSTaskCompletionSource taskCompletionSource];
-        NSURLSession *session = [NSURLSession sharedSession];
-        NSURLSessionTask * sessionTask = [session dataTaskWithRequest:request
-                                                    completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            if (error) {
-                [tcs setError:error];
-                
-                return;
-            }
-            [tcs setResult:data];
-        }];
-        [sessionTask resume];
-        [tcs.task waitUntilFinished];
-        
-        if (tcs.task.error) {
-            NSLog(@"get token error: %@", tcs.task.error);
-            
+        if (tokenJson == NULL) {
+            NSLog(@"get token error: %@", instanceId);
             return nil;
-        } else {
-            NSData *jsonText=[aesDecrypt(aesKey, iv, [[NSString alloc] initWithData:tcs.task.result encoding:NSUTF8StringEncoding]) dataUsingEncoding:NSUTF8StringEncoding];
-            NSLog(@"get token aes: %@", jsonText);
-            
-            if (jsonText == nil) {
-                return nil;
-            }
-            
-            NSDictionary *object = [NSJSONSerialization JSONObjectWithData: jsonText
-                                                                   options:kNilOptions
-                                                                     error:nil];
-            OSSFederationToken * token = [OSSFederationToken new];
-            token.tAccessKey = [object objectForKey:@"AccessKeyId"];
-            token.tSecretKey = [object objectForKey:@"AccessKeySecret"];
-            token.tToken = [object objectForKey:@"SecurityToken"];
-            token.expirationTimeInGMTFormat = [object objectForKey:@"Expiration"];
-            
-            return token;
         }
+        if (tokenJson.length == 0) {
+            NSLog(@"get token error(empty) %@", instanceId);
+            return nil;
+        }
+        
+        NSData *jsonText = [tokenJson dataUsingEncoding:NSUTF8StringEncoding];
+        if (jsonText == nil) {
+            NSLog(@"get token error(format) %@", instanceId);
+            return nil;
+        }
+        
+        NSDictionary *object = [NSJSONSerialization JSONObjectWithData: jsonText
+                                                               options: kNilOptions
+                                                                 error: nil];
+        OSSFederationToken * token = [OSSFederationToken new];
+        token.tAccessKey = [object objectForKey:@"accessKeyId"];
+        token.tSecretKey = [object objectForKey:@"accessKeySecret"];
+        token.tToken = [object objectForKey:@"securityToken"];
+        token.expirationTimeInGMTFormat = [object objectForKey:@"expiration"];
+        
+        return token;
     }];
     
     oss = [[OSSClient alloc] initWithEndpoint:endpoint credentialProvider:credentialProvider];
@@ -273,6 +261,46 @@ OSSClient *oss = nil;
         
         result(arguments);
     }
+}
+
+- (void)resignUrl:(FlutterMethodCall*)call result:(FlutterResult)result {
+    if (![self checkOss:result]) {
+        return;
+    }
+    
+    NSString *instanceId = call.arguments[@"instanceId"];
+    NSString *requestId = call.arguments[@"requestId"];
+    NSString *bucket = call.arguments[@"bucket"];
+    NSString *key = call.arguments[@"key"];
+    NSString *expireSeconds = call.arguments[@"expireSeconds"];
+    long long expireNum = [expireSeconds longLongValue];
+    
+    OSSTask *task = [oss presignConstrainURLWithBucketName:bucket withObjectKey:key withExpirationInterval:expireNum];
+    [task continueWithBlock:^id _Nullable(OSSTask * _Nonnull task) {
+        if (!task.error) {
+            OSSGetObjectResult *getResult = task.result;
+            NSDictionary *arguments = @{
+                @"success": @"true",
+                @"instanceId":instanceId,
+                @"requestId":requestId,
+                @"bucket":bucket,
+                @"key":key,
+                @"data":[NSString stringWithFormat:@"%@", getResult]
+            };
+            result(arguments);
+        } else {
+            NSDictionary *arguments = @{
+                @"success": @"false",
+                @"instanceId":instanceId,
+                @"requestId":requestId,
+                @"bucket":bucket,
+                @"key":key,
+                @"message":task.error
+            };
+            result(arguments);
+        }
+        return nil;
+    }];
 }
 
 - (BOOL)checkOss:(FlutterResult)result {
